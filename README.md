@@ -1,11 +1,11 @@
 # kmer-minhash
 
-Parallel $k$-mer min-wise hashing in Rust.
+Parallel _k_-mer min-wise hashing in Rust.
 
 This package provides:
-- `Kmers` type for representing the $k$-mers of some sequence
-- `KmersIterator` for iterating over the $k$-mers
-- `MinHash` trait for min-wise hashing $k$-mers
+- `Kmers` type for representing the _k_-mers of some sequence
+- `KmersIterator` for iterating over the _k_-mers
+- `MinHash` trait for min-wise hashing _k_-mers
 
 ### Example
 
