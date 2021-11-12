@@ -19,7 +19,7 @@ async fn main() {
         tokio::spawn(async move {
             let record = record_result.unwrap();
             let kmers = Kmers::new(record.seq(), KMER_SIZE);
-            match kmers.into_iter().min_hash(N_HASHES) {
+            match kmers.min_hash(N_HASHES) {
                 Ok(hashes) => tx.send(hashes).unwrap(),
                 Err(e) => match e {
                     MinHashError::NotEnoughHashes { .. } => {

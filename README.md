@@ -23,7 +23,7 @@ fn main() {
 
     let kmers = Kmers::from_str(seq, KMER_SIZE);
 
-    let min_hashes = kmers.into_iter().min_hash(N_HASHES).unwrap();
+    let min_hashes = kmers.min_hash(N_HASHES).unwrap();
 
     // Check that the minhashes are correct:
     let mut manual_hashes = vec!["abc", "bcd", "cde"]
