@@ -1,5 +1,5 @@
 use std::{
-    collections::{hash_map::DefaultHasher, BinaryHeap},
+    collections::{hash_map::DefaultHasher, BinaryHeap, HashSet},
     fmt::{self, Display, Formatter},
     hash::{Hash, Hasher},
 };
@@ -62,23 +62,6 @@ impl<'a> Iterator for KmersIntoIter<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub enum MinHashError {
-    NotEnoughHashes { n: usize },
-}
-
-impl std::error::Error for MinHashError {}
-
-impl Display for MinHashError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            MinHashError::NotEnoughHashes { n } => {
-                write!(f, "{}", format!("Only {} hashes were produced", n))
-            }
-        }
-    }
-}
-
 pub trait MinHash<T>
 where
     T: Hash,
@@ -88,6 +71,16 @@ where
 
 impl<'a> MinHash<&'a [u8]> for KmersIntoIter<'a> {
     fn min_hash(&self, n: usize) -> Result<Vec<u64>, MinHashError> {
+        // Two implementations of min_hash using heaps and sets:
+        // Default
+        self.set_min_hash(n)
+        // Alternative
+        // self.heap_min_hash(n)
+    }
+}
+
+impl<'a> KmersIntoIter<'a> {
+    fn heap_min_hash(&self, n: usize) -> Result<Vec<u64>, MinHashError> {
         let mut heap = BinaryHeap::new();
 
         self.for_each(|s| {
@@ -114,11 +107,58 @@ impl<'a> MinHash<&'a [u8]> for KmersIntoIter<'a> {
             Ok(heap.into_sorted_vec())
         }
     }
+
+    fn set_min_hash(&self, n: usize) -> Result<Vec<u64>, MinHashError> {
+        let mut set = HashSet::new();
+        let mut biggest = 0;
+
+        self.for_each(|s| {
+            let mut hasher = DefaultHasher::new();
+            s.hash(&mut hasher);
+            let hash = hasher.finish();
+
+            if set.len() < n {
+                set.insert(hash);
+                if hash > biggest {
+                    biggest = hash;
+                }
+            } else if hash < biggest {
+                set.remove(&biggest);
+                set.insert(hash);
+                biggest = hash;
+            }
+        });
+
+        if set.len() < n {
+            Err(MinHashError::NotEnoughHashes { n: set.len() })
+        } else {
+            let mut hashes = set.into_iter().collect::<Vec<u64>>();
+            hashes.sort();
+            Ok(hashes)
+        }
+    }
 }
 
 impl<'a> MinHash<&'a [u8]> for Kmers<'a> {
     fn min_hash(&self, n: usize) -> Result<Vec<u64>, MinHashError> {
         self.into_iter().min_hash(n)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum MinHashError {
+    NotEnoughHashes { n: usize },
+}
+
+impl std::error::Error for MinHashError {}
+
+impl Display for MinHashError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            MinHashError::NotEnoughHashes { n } => {
+                write!(f, "{}", format!("Only {} hashes were produced", n))
+            }
+        }
     }
 }
 
@@ -189,6 +229,30 @@ mod tests {
     #[test]
     fn min_hash() {
         let hashes = Kmers::from_str("abc", 2).min_hash(2).unwrap();
+        assert_eq!(hashes.len(), 2);
+        let mut manual_hashes = vec![hash("ab"), hash("bc")];
+        manual_hashes.sort();
+        assert_eq!(hashes, manual_hashes);
+    }
+
+    #[test]
+    fn set_min_hash() {
+        let hashes = Kmers::from_str("abc", 2)
+            .into_iter()
+            .set_min_hash(2)
+            .unwrap();
+        assert_eq!(hashes.len(), 2);
+        let mut manual_hashes = vec![hash("ab"), hash("bc")];
+        manual_hashes.sort();
+        assert_eq!(hashes, manual_hashes);
+    }
+
+    #[test]
+    fn heap_min_hash() {
+        let hashes = Kmers::from_str("abc", 2)
+            .into_iter()
+            .heap_min_hash(2)
+            .unwrap();
         assert_eq!(hashes.len(), 2);
         let mut manual_hashes = vec![hash("ab"), hash("bc")];
         manual_hashes.sort();
