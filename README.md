@@ -21,7 +21,7 @@ const N_HASHES: usize = 2;
 fn main() {
     let seq = "abcde";
 
-    let kmers = Kmers::new(seq, KMER_SIZE);
+    let kmers = Kmers::from_str(seq, KMER_SIZE);
 
     let min_hashes = kmers.into_iter().min_hash(N_HASHES).unwrap();
 

@@ -1,22 +1,29 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::BinaryHeap;
+use std::fmt::{self, Display, Formatter};
 use std::hash::{Hash, Hasher};
 
-// TODO implement with `seq` as `&[u8]`
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub struct Kmers<'a> {
-    seq: &'a str,
+    seq: &'a [u8],
     k: usize,
 }
 
 impl<'a> Kmers<'a> {
-    pub fn new(seq: &'a str, k: usize) -> Kmers<'a> {
+    pub fn new(seq: &'a [u8], k: usize) -> Kmers<'a> {
         Kmers { seq, k }
+    }
+
+    pub fn from_str(s: &'a str, k: usize) -> Kmers<'a> {
+        Kmers {
+            seq: s.as_bytes(),
+            k,
+        }
     }
 }
 
 impl<'a> IntoIterator for Kmers<'a> {
-    type Item = &'a str;
+    type Item = &'a [u8];
     type IntoIter = KmersIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -40,7 +47,7 @@ impl<'a> KmersIterator<'a> {
 }
 
 impl<'a> Iterator for KmersIterator<'a> {
-    type Item = &'a str;
+    type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
         let (start, end) = (self.index, self.index + self.kmers.k);
@@ -55,14 +62,16 @@ impl<'a> Iterator for KmersIterator<'a> {
 
 #[derive(Debug, PartialEq)]
 pub enum MinHashError {
-    NotEnoughHashes,
+    NotEnoughHashes { n: usize },
 }
-
-use std::fmt::{self, Display, Formatter};
 
 impl Display for MinHashError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "Not enough hashes were produced")
+        match self {
+            MinHashError::NotEnoughHashes { n } => {
+                write!(f, "{}", format!("Only {} hashes were produced", n))
+            }
+        }
     }
 }
 
@@ -94,14 +103,14 @@ where
         });
 
         if heap.len() < n {
-            Err(MinHashError::NotEnoughHashes {})
+            Err(MinHashError::NotEnoughHashes { n: heap.len() })
         } else {
             Ok(heap.into_sorted_vec())
         }
     }
 }
 
-impl<'a> MinHash<&'a str> for KmersIterator<'a> {}
+impl<'a> MinHash<&'a [u8]> for KmersIterator<'a> {}
 
 #[cfg(test)]
 mod tests {
@@ -114,83 +123,108 @@ mod tests {
     use tokio::sync::mpsc;
 
     #[test]
-    fn constructor() {
-        let kmer = Kmers::new("abc", 2);
-        assert_eq!(kmer, Kmers { seq: "abc", k: 2 });
+    fn new() {
+        let kmer = Kmers::new(&"abc".as_bytes(), 2);
+        assert_eq!(
+            kmer,
+            Kmers {
+                seq: &"abc".as_bytes(),
+                k: 2
+            }
+        );
+    }
+
+    #[test]
+    fn from_str() {
+        let kmer = Kmers::from_str("abc", 2);
+        assert_eq!(
+            kmer,
+            Kmers {
+                seq: &"abc".as_bytes(),
+                k: 2
+            }
+        );
     }
 
     #[test]
     fn iteration() {
-        let kmer = Kmers::new("abcd", 2);
+        let kmer = Kmers::from_str("abcd", 2);
         let mut iter = kmer.into_iter();
-        assert_eq!(iter.next().unwrap(), "ab");
-        assert_eq!(iter.next().unwrap(), "bc");
-        assert_eq!(iter.next().unwrap(), "cd");
+        assert_eq!(iter.next().unwrap(), "ab".as_bytes());
+        assert_eq!(iter.next().unwrap(), "bc".as_bytes());
+        assert_eq!(iter.next().unwrap(), "cd".as_bytes());
         assert!(iter.next().is_none());
     }
 
     #[test]
-    fn iterator() {
-        let kmers = Kmers::new("abcd", 2)
+    fn kmers_iterator() {
+        let kmers = Kmers::from_str("abcd", 2)
             .into_iter()
             .map(|s| s)
-            .collect::<Vec<&str>>();
-        assert_eq!(kmers, vec!["ab", "bc", "cd"])
+            .collect::<Vec<&[u8]>>();
+        assert_eq!(
+            kmers,
+            vec!["ab".as_bytes(), "bc".as_bytes(), "cd".as_bytes()]
+        )
     }
 
     #[test]
-    fn iterator_from_index() {
-        let kmers = KmersIterator::new_from_index(Kmers::new("abcd", 2), 1)
+    fn kmers_iterator_from_index() {
+        let kmers = KmersIterator::new_from_index(Kmers::from_str("abcd", 2), 1)
             .map(|s| s)
-            .collect::<Vec<&str>>();
-        assert_eq!(kmers, vec!["bc", "cd"])
+            .collect::<Vec<&[u8]>>();
+        assert_eq!(kmers, vec!["bc".as_bytes(), "cd".as_bytes()])
     }
 
     #[test]
     fn min_hash() {
-        let hashes = Kmers::new("abc", 2).into_iter().min_hash(2).unwrap();
+        let hashes = Kmers::from_str("abc", 2).into_iter().min_hash(2).unwrap();
         assert_eq!(hashes.len(), 2);
-        let mut manual_hashes = vec![hash_str("ab"), hash_str("bc")];
+        let mut manual_hashes = vec![hash("ab"), hash("bc")];
         manual_hashes.sort();
         assert_eq!(hashes, manual_hashes);
     }
 
     #[test]
-    fn not_enough_hashes() {
-        let err = Kmers::new("abcd", 2).into_iter().min_hash(4).unwrap_err();
-        assert_eq!(err, MinHashError::NotEnoughHashes {});
+    fn min_hash_not_enough_hashes() {
+        let err = Kmers::from_str("abcd", 2)
+            .into_iter()
+            .min_hash(4)
+            .unwrap_err();
+        assert_eq!(err, MinHashError::NotEnoughHashes { n: 3 });
     }
 
     #[test]
     fn sparse_min_hash_k2() {
-        let hashes = Kmers::new("abcd", 2).into_iter().min_hash(2).unwrap();
-        let mut manual_hashes = vec![hash_str("ab"), hash_str("bc"), hash_str("cd")];
+        let hashes = Kmers::from_str("abcd", 2).into_iter().min_hash(2).unwrap();
+        let mut manual_hashes = vec![hash("ab"), hash("bc"), hash("cd")];
         manual_hashes.sort();
         assert_eq!(hashes, manual_hashes[..2]);
     }
 
     #[test]
     fn sparse_min_hash_k3() {
-        let hashes = Kmers::new("abcdef", 3).into_iter().min_hash(3).unwrap();
-        let mut manual_hashes = vec![
-            hash_str("abc"),
-            hash_str("bcd"),
-            hash_str("cde"),
-            hash_str("def"),
-        ];
+        let hashes = Kmers::from_str("abcdef", 3)
+            .into_iter()
+            .min_hash(3)
+            .unwrap();
+        let mut manual_hashes = vec![hash("abc"), hash("bcd"), hash("cde"), hash("def")];
         manual_hashes.sort();
         assert_eq!(hashes, manual_hashes[..3]);
     }
 
     #[test]
     fn sparse_min_hash_k4() {
-        let hashes = Kmers::new("abcdefgh", 4).into_iter().min_hash(4).unwrap();
+        let hashes = Kmers::from_str("abcdefgh", 4)
+            .into_iter()
+            .min_hash(4)
+            .unwrap();
         let mut manual_hashes = vec![
-            hash_str("abcd"),
-            hash_str("bcde"),
-            hash_str("cdef"),
-            hash_str("defg"),
-            hash_str("efgh"),
+            hash("abcd"),
+            hash("bcde"),
+            hash("cdef"),
+            hash("defg"),
+            hash("efgh"),
         ];
         manual_hashes.sort();
         assert_eq!(hashes, manual_hashes[..4]);
@@ -198,15 +232,15 @@ mod tests {
 
     #[test]
     fn concurrent_min_hash_rayon() {
-        let kmers = vec![Kmers::new("abcd", 2), Kmers::new("bcde", 2)];
+        let kmers = vec![Kmers::from_str("abcd", 2), Kmers::from_str("bcde", 2)];
         let hashes = kmers
             .par_iter()
             .map(|k| k.into_iter().min_hash(2).unwrap())
             .collect::<Vec<_>>();
 
-        let mut manual_hashes_1 = vec![hash_str("ab"), hash_str("bc"), hash_str("cd")];
+        let mut manual_hashes_1 = vec![hash("ab"), hash("bc"), hash("cd")];
         manual_hashes_1.sort();
-        let mut manual_hashes_2 = vec![hash_str("bc"), hash_str("cd"), hash_str("de")];
+        let mut manual_hashes_2 = vec![hash("bc"), hash("cd"), hash("de")];
         manual_hashes_2.sort();
         let manual_hashes = vec![manual_hashes_1[..2].to_vec(), manual_hashes_2[..2].to_vec()];
 
@@ -215,7 +249,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn concurrent_min_hash_tokio() {
-        let kmers = vec![Kmers::new("abcd", 2), Kmers::new("bcde", 2)];
+        let kmers = vec![Kmers::from_str("abcd", 2), Kmers::from_str("bcde", 2)];
         let mut all_hashes = vec![];
 
         let (tx, mut rx) = mpsc::unbounded_channel();
@@ -232,9 +266,9 @@ mod tests {
             all_hashes.push(hashes);
         }
 
-        let mut manual_hashes_1 = vec![hash_str("ab"), hash_str("bc"), hash_str("cd")];
+        let mut manual_hashes_1 = vec![hash("ab"), hash("bc"), hash("cd")];
         manual_hashes_1.sort();
-        let mut manual_hashes_2 = vec![hash_str("bc"), hash_str("cd"), hash_str("de")];
+        let mut manual_hashes_2 = vec![hash("bc"), hash("cd"), hash("de")];
         manual_hashes_2.sort();
         let mut manual_hashes = vec![manual_hashes_1[..2].to_vec(), manual_hashes_2[..2].to_vec()];
 
@@ -260,8 +294,7 @@ mnop
             let tx = tx.clone();
             tokio::spawn(async move {
                 let record = record_result.unwrap();
-                let seq = str::from_utf8(record.seq()).unwrap();
-                let k = Kmers::new(seq, 3);
+                let k = Kmers::new(record.seq(), 3);
                 let hashes = k.into_iter().min_hash(3).unwrap();
                 tx.send(hashes).unwrap();
             });
@@ -274,7 +307,7 @@ mnop
 
         let mut manual_hashes = vec!["abcdefgh", "ijklmnop"]
             .iter()
-            .map(|s| Kmers::new(s, 3).into_iter().min_hash(3).unwrap())
+            .map(|s| Kmers::from_str(s, 3).into_iter().min_hash(3).unwrap())
             .collect::<Vec<Vec<u64>>>();
 
         all_hashes.sort();
@@ -282,9 +315,10 @@ mnop
         assert_eq!(all_hashes, manual_hashes);
     }
 
-    fn hash_str(s: &str) -> u64 {
+    fn hash(s: &str) -> u64 {
+        let b = s.as_bytes();
         let mut h = DefaultHasher::new();
-        s.hash(&mut h);
+        b.hash(&mut h);
         h.finish()
     }
 }

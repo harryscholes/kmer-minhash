@@ -1,13 +1,13 @@
-use std::{
-    io::{self, Write},
-    str,
-};
+use std::io::{self, Write};
 
 use bio::io::fasta;
 use itertools::Itertools;
 use tokio::sync::mpsc;
 
-use kmer_minhash::{Kmers, MinHash};
+use kmer_minhash::{Kmers, MinHash, MinHashError};
+
+const KMER_SIZE: usize = 3;
+const N_HASHES: usize = 64;
 
 #[tokio::main]
 async fn main() {
@@ -18,10 +18,15 @@ async fn main() {
         let tx = tx.clone();
         tokio::spawn(async move {
             let record = record_result.unwrap();
-            let seq = str::from_utf8(record.seq()).unwrap();
-            let k = Kmers::new(seq, 8);
-            let hashes = k.into_iter().min_hash(64).unwrap();
-            tx.send(hashes).unwrap();
+            let kmers = Kmers::new(record.seq(), KMER_SIZE);
+            match kmers.into_iter().min_hash(N_HASHES) {
+                Ok(hashes) => tx.send(hashes).unwrap(),
+                Err(e) => match e {
+                    MinHashError::NotEnoughHashes { .. } => {
+                        eprintln!("{} for sequence id {}", e, record.id())
+                    }
+                },
+            }
         });
     }
     drop(tx);
