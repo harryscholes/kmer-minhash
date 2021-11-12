@@ -3,9 +3,9 @@
 Parallel _k_-mer min-wise hashing in Rust.
 
 This package provides:
-- `Kmers` type for representing the _k_-mers of some sequence
-- `KmersIterator` for iterating over the _k_-mers
-- `MinHash` trait for min-wise hashing _k_-mers
+- `Kmers` struct for representing the _k_-mers of some sequence
+- `KmersIntoIter` struct for iterating over the _k_-mers
+- `MinHash` trait for min-wise hashing of _k_-mers
 
 ### Example
 
