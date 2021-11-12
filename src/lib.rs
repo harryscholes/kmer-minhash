@@ -81,7 +81,7 @@ impl<'a> MinHash<&'a [u8]> for KmersIntoIter<'a> {
 
 impl<'a> KmersIntoIter<'a> {
     fn heap_min_hash(&self, n: usize) -> Result<Vec<u64>, MinHashError> {
-        let mut heap = BinaryHeap::new();
+        let mut heap = BinaryHeap::with_capacity(n);
 
         self.for_each(|s| {
             let mut hasher = DefaultHasher::new();
@@ -109,7 +109,7 @@ impl<'a> KmersIntoIter<'a> {
     }
 
     fn set_min_hash(&self, n: usize) -> Result<Vec<u64>, MinHashError> {
-        let mut set = HashSet::new();
+        let mut set = HashSet::with_capacity(n);
         let mut biggest = 0;
 
         self.for_each(|s| {
@@ -198,12 +198,21 @@ mod tests {
 
     #[test]
     fn iteration() {
-        let kmer = Kmers::from_str("abcd", 2);
-        let mut iter = kmer.into_iter();
+        let kmers = Kmers::from_str("abcd", 2);
+        let mut iter = kmers.into_iter();
         assert_eq!(iter.next().unwrap(), "ab".as_bytes());
         assert_eq!(iter.next().unwrap(), "bc".as_bytes());
         assert_eq!(iter.next().unwrap(), "cd".as_bytes());
         assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn collect_iter() {
+        let kmers = Kmers::from_str("abcd", 2);
+        assert_eq!(
+            kmers.into_iter().collect::<Vec<&[u8]>>(),
+            vec!["ab".as_bytes(), "bc".as_bytes(), "cd".as_bytes()]
+        );
     }
 
     #[test]
