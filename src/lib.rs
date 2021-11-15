@@ -79,6 +79,7 @@ impl<'a> MinHash<&'a [u8]> for KmersIntoIter<'a> {
     }
 }
 
+#[allow(dead_code)]
 impl<'a> KmersIntoIter<'a> {
     fn heap_min_hash(&self, n: usize) -> Result<Vec<u64>, MinHashError> {
         let mut heap = BinaryHeap::with_capacity(n);
@@ -133,7 +134,7 @@ impl<'a> KmersIntoIter<'a> {
             Err(MinHashError::NotEnoughHashes { n: set.len() })
         } else {
             let mut hashes = set.into_iter().collect::<Vec<u64>>();
-            hashes.sort();
+            hashes.sort_unstable();
             Ok(hashes)
         }
     }
