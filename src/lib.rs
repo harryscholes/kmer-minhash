@@ -1,5 +1,5 @@
 use std::{
-    collections::{hash_map::DefaultHasher, BinaryHeap, HashSet},
+    collections::{hash_map::DefaultHasher, BinaryHeap},
     fmt::{self, Display, Formatter},
     hash::{Hash, Hasher},
 };
@@ -71,11 +71,7 @@ where
 
 impl<'a> MinHash<&'a [u8]> for KmersIntoIter<'a> {
     fn min_hash(&self, n: usize) -> Result<Vec<u64>, MinHashError> {
-        // Two implementations of min_hash using heaps and sets:
-        // Default
-        self.set_min_hash(n)
-        // Alternative
-        // self.heap_min_hash(n)
+        self.heap_min_hash(n)
     }
 }
 
@@ -106,36 +102,6 @@ impl<'a> KmersIntoIter<'a> {
             Err(MinHashError::NotEnoughHashes { n: heap.len() })
         } else {
             Ok(heap.into_sorted_vec())
-        }
-    }
-
-    fn set_min_hash(&self, n: usize) -> Result<Vec<u64>, MinHashError> {
-        let mut set = HashSet::with_capacity(n);
-        let mut biggest = 0;
-
-        self.for_each(|s| {
-            let mut hasher = DefaultHasher::new();
-            s.hash(&mut hasher);
-            let hash = hasher.finish();
-
-            if set.len() < n {
-                set.insert(hash);
-                if hash > biggest {
-                    biggest = hash;
-                }
-            } else if hash < biggest {
-                set.remove(&biggest);
-                set.insert(hash);
-                biggest = hash;
-            }
-        });
-
-        if set.len() < n {
-            Err(MinHashError::NotEnoughHashes { n: set.len() })
-        } else {
-            let mut hashes = set.into_iter().collect::<Vec<u64>>();
-            hashes.sort_unstable();
-            Ok(hashes)
         }
     }
 }
@@ -239,18 +205,6 @@ mod tests {
     #[test]
     fn min_hash() {
         let hashes = Kmers::from_str("abc", 2).min_hash(2).unwrap();
-        assert_eq!(hashes.len(), 2);
-        let mut manual_hashes = vec![hash("ab"), hash("bc")];
-        manual_hashes.sort();
-        assert_eq!(hashes, manual_hashes);
-    }
-
-    #[test]
-    fn set_min_hash() {
-        let hashes = Kmers::from_str("abc", 2)
-            .into_iter()
-            .set_min_hash(2)
-            .unwrap();
         assert_eq!(hashes.len(), 2);
         let mut manual_hashes = vec![hash("ab"), hash("bc")];
         manual_hashes.sort();

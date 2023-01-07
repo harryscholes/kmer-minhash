@@ -12,5 +12,5 @@ cat human.fasta  0.00s user 0.01s system 10% cpu 0.097 total
 
 $ wc human.*
   219680  422556 13604162 human.fasta
-   20371   20368 25394527 human.minhash
+   20184   20184 25284945 human.minhash
 ```
