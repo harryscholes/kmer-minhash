@@ -79,7 +79,7 @@ impl<'a> Kmers<'a> {
     fn heap_min_hash(&self, n: usize) -> Result<Vec<u64>, MinHashError> {
         let mut heap = BinaryHeap::with_capacity(n);
 
-        self.into_iter().for_each(|s| {
+        for s in self.into_iter() {
             let mut hasher = DefaultHasher::new();
             s.hash(&mut hasher);
             let hash = hasher.finish();
@@ -95,7 +95,7 @@ impl<'a> Kmers<'a> {
                     }
                 }
             }
-        });
+        }
 
         if heap.len() < n {
             Err(MinHashError::NotEnoughHashes { n: heap.len() })
