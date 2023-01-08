@@ -43,7 +43,7 @@ impl<'a> KmersIntoIter<'a> {
         KmersIntoIter { kmers, index: 0 }
     }
 
-    pub fn new_from_index(kmers: Kmers<'a>, index: usize) -> KmersIntoIter<'a> {
+    pub fn at_index(kmers: Kmers<'a>, index: usize) -> KmersIntoIter<'a> {
         KmersIntoIter { kmers, index }
     }
 }
@@ -79,9 +79,9 @@ impl<'a> Kmers<'a> {
     fn heap_min_hash(&self, n: usize) -> Result<Vec<u64>, MinHashError> {
         let mut heap = BinaryHeap::with_capacity(n);
 
-        for s in self.into_iter() {
+        for kmer in self.into_iter() {
             let mut hasher = DefaultHasher::new();
-            s.hash(&mut hasher);
+            kmer.hash(&mut hasher);
             let hash = hasher.finish();
 
             match heap.peek() {
@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn kmers_iterator_from_index() {
-        let kmers = KmersIntoIter::new_from_index(Kmers::from_str("abcd", 2), 1)
+        let kmers = KmersIntoIter::at_index(Kmers::from_str("abcd", 2), 1)
             .map(|s| s)
             .collect::<Vec<&[u8]>>();
         assert_eq!(kmers, vec!["bc".as_bytes(), "cd".as_bytes()])
