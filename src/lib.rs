@@ -61,7 +61,16 @@ impl<'a> Iterator for KmersIterator<'a> {
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let l = 1 + self.kmers.seq.len() - self.index - self.kmers.k;
+        (l, Some(l))
+    }
 }
+
+impl<'a> std::iter::ExactSizeIterator for KmersIterator<'a> {}
+
+impl<'a> std::iter::FusedIterator for KmersIterator<'a> {}
 
 pub trait MinHash<T>
 where
@@ -196,6 +205,24 @@ mod tests {
             .map(|s| s)
             .collect::<Vec<&[u8]>>();
         assert_eq!(kmers, vec!["bc".as_bytes(), "cd".as_bytes()])
+    }
+
+    #[test]
+    fn kmers_iterator_len_k2() {
+        let mut iter = KmersIterator::new(Kmers::from_str("abcd", 2));
+        for i in 3..=0 {
+            assert_eq!(iter.len(), i);
+            iter.next();
+        }
+    }
+
+    #[test]
+    fn kmers_iterator_len_k3() {
+        let mut iter = KmersIterator::new(Kmers::from_str("abcde", 3));
+        for i in 3..=0 {
+            assert_eq!(iter.len(), i);
+            iter.next();
+        }
     }
 
     #[test]
