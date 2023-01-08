@@ -69,18 +69,17 @@ where
     fn min_hash(&self, n: usize) -> Result<Vec<u64>, MinHashError>;
 }
 
-impl<'a> MinHash<&'a [u8]> for KmersIntoIter<'a> {
+impl<'a> MinHash<&'a [u8]> for Kmers<'a> {
     fn min_hash(&self, n: usize) -> Result<Vec<u64>, MinHashError> {
         self.heap_min_hash(n)
     }
 }
 
-#[allow(dead_code)]
-impl<'a> KmersIntoIter<'a> {
+impl<'a> Kmers<'a> {
     fn heap_min_hash(&self, n: usize) -> Result<Vec<u64>, MinHashError> {
         let mut heap = BinaryHeap::with_capacity(n);
 
-        self.for_each(|s| {
+        self.into_iter().for_each(|s| {
             let mut hasher = DefaultHasher::new();
             s.hash(&mut hasher);
             let hash = hasher.finish();
@@ -103,12 +102,6 @@ impl<'a> KmersIntoIter<'a> {
         } else {
             Ok(heap.into_sorted_vec())
         }
-    }
-}
-
-impl<'a> MinHash<&'a [u8]> for Kmers<'a> {
-    fn min_hash(&self, n: usize) -> Result<Vec<u64>, MinHashError> {
-        self.into_iter().min_hash(n)
     }
 }
 
@@ -213,10 +206,7 @@ mod tests {
 
     #[test]
     fn heap_min_hash() {
-        let hashes = Kmers::from_str("abc", 2)
-            .into_iter()
-            .heap_min_hash(2)
-            .unwrap();
+        let hashes = Kmers::from_str("abc", 2).heap_min_hash(2).unwrap();
         assert_eq!(hashes.len(), 2);
         let mut manual_hashes = vec![hash("ab"), hash("bc")];
         manual_hashes.sort();
@@ -336,7 +326,7 @@ mnop
 
         let mut manual_hashes = vec!["abcdefgh", "ijklmnop"]
             .iter()
-            .map(|s| Kmers::from_str(s, 3).into_iter().min_hash(3).unwrap())
+            .map(|s| Kmers::from_str(s, 3).min_hash(3).unwrap())
             .collect::<Vec<Vec<u64>>>();
 
         all_hashes.sort();
