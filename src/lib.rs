@@ -25,39 +25,40 @@ impl<'a> Kmers<'a> {
 
 impl<'a> IntoIterator for Kmers<'a> {
     type Item = &'a [u8];
-    type IntoIter = KmersIntoIter<'a>;
+    type IntoIter = KmersIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        KmersIntoIter::new(self)
+        KmersIterator::new(self)
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct KmersIntoIter<'a> {
+pub struct KmersIterator<'a> {
     kmers: Kmers<'a>,
     index: usize,
 }
 
-impl<'a> KmersIntoIter<'a> {
-    pub fn new(kmers: Kmers<'a>) -> KmersIntoIter<'a> {
-        KmersIntoIter { kmers, index: 0 }
+impl<'a> KmersIterator<'a> {
+    pub fn new(kmers: Kmers<'a>) -> KmersIterator<'a> {
+        Self::at_index(kmers, 0)
     }
 
-    pub fn at_index(kmers: Kmers<'a>, index: usize) -> KmersIntoIter<'a> {
-        KmersIntoIter { kmers, index }
+    pub fn at_index(kmers: Kmers<'a>, index: usize) -> KmersIterator<'a> {
+        KmersIterator { kmers, index }
     }
 }
 
-impl<'a> Iterator for KmersIntoIter<'a> {
+impl<'a> Iterator for KmersIterator<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (start, end) = (self.index, self.index + self.kmers.k);
-        if end > self.kmers.seq.len() {
-            None
-        } else {
+        let end = self.index + self.kmers.k;
+
+        if end <= self.kmers.seq.len() {
+            let kmer = &self.kmers.seq[self.index..end];
             self.index += 1;
-            Some(&self.kmers.seq[start..end])
+            Some(kmer)
+        } else {
+            None
         }
     }
 }
@@ -80,9 +81,7 @@ impl<'a> Kmers<'a> {
         let mut heap = BinaryHeap::with_capacity(n);
 
         for kmer in self.into_iter() {
-            let mut hasher = DefaultHasher::new();
-            kmer.hash(&mut hasher);
-            let hash = hasher.finish();
+            let hash = hash(kmer);
 
             match heap.peek() {
                 None => heap.push(hash),
@@ -103,6 +102,12 @@ impl<'a> Kmers<'a> {
             Ok(heap.into_sorted_vec())
         }
     }
+}
+
+fn hash(input: impl Hash) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    input.hash(&mut hasher);
+    hasher.finish()
 }
 
 #[derive(Debug, PartialEq)]
@@ -126,15 +131,13 @@ impl Display for MinHashError {
 mod tests {
     use super::*;
 
-    use std::str;
-
     use bio::io::fasta;
     use rayon::prelude::*;
     use tokio::sync::mpsc;
 
     #[test]
     fn new() {
-        let kmer = Kmers::new(&"abc".as_bytes(), 2);
+        let kmer = Kmers::new("abc".as_bytes(), 2);
         assert_eq!(
             kmer,
             Kmers {
@@ -188,8 +191,8 @@ mod tests {
     }
 
     #[test]
-    fn kmers_iterator_from_index() {
-        let kmers = KmersIntoIter::at_index(Kmers::from_str("abcd", 2), 1)
+    fn kmers_iterator_at_index() {
+        let kmers = KmersIterator::at_index(Kmers::from_str("abcd", 2), 1)
             .map(|s| s)
             .collect::<Vec<&[u8]>>();
         assert_eq!(kmers, vec!["bc".as_bytes(), "cd".as_bytes()])
@@ -197,9 +200,10 @@ mod tests {
 
     #[test]
     fn min_hash() {
-        let hashes = Kmers::from_str("abc", 2).min_hash(2).unwrap();
+        let kmers = Kmers::from_str("abc", 2);
+        let hashes = kmers.min_hash(2).unwrap();
         assert_eq!(hashes.len(), 2);
-        let mut manual_hashes = vec![hash("ab"), hash("bc")];
+        let mut manual_hashes = vec![hash("ab".as_bytes()), hash("bc".as_bytes())];
         manual_hashes.sort();
         assert_eq!(hashes, manual_hashes);
     }
@@ -208,7 +212,7 @@ mod tests {
     fn heap_min_hash() {
         let hashes = Kmers::from_str("abc", 2).heap_min_hash(2).unwrap();
         assert_eq!(hashes.len(), 2);
-        let mut manual_hashes = vec![hash("ab"), hash("bc")];
+        let mut manual_hashes = vec![hash("ab".as_bytes()), hash("bc".as_bytes())];
         manual_hashes.sort();
         assert_eq!(hashes, manual_hashes);
     }
@@ -222,7 +226,11 @@ mod tests {
     #[test]
     fn sparse_min_hash_k2() {
         let hashes = Kmers::from_str("abcd", 2).min_hash(2).unwrap();
-        let mut manual_hashes = vec![hash("ab"), hash("bc"), hash("cd")];
+        let mut manual_hashes = vec![
+            hash("ab".as_bytes()),
+            hash("bc".as_bytes()),
+            hash("cd".as_bytes()),
+        ];
         manual_hashes.sort();
         assert_eq!(hashes, manual_hashes[..2]);
     }
@@ -230,7 +238,12 @@ mod tests {
     #[test]
     fn sparse_min_hash_k3() {
         let hashes = Kmers::from_str("abcdef", 3).min_hash(3).unwrap();
-        let mut manual_hashes = vec![hash("abc"), hash("bcd"), hash("cde"), hash("def")];
+        let mut manual_hashes = vec![
+            hash("abc".as_bytes()),
+            hash("bcd".as_bytes()),
+            hash("cde".as_bytes()),
+            hash("def".as_bytes()),
+        ];
         manual_hashes.sort();
         assert_eq!(hashes, manual_hashes[..3]);
     }
@@ -239,11 +252,11 @@ mod tests {
     fn sparse_min_hash_k4() {
         let hashes = Kmers::from_str("abcdefgh", 4).min_hash(4).unwrap();
         let mut manual_hashes = vec![
-            hash("abcd"),
-            hash("bcde"),
-            hash("cdef"),
-            hash("defg"),
-            hash("efgh"),
+            hash("abcd".as_bytes()),
+            hash("bcde".as_bytes()),
+            hash("cdef".as_bytes()),
+            hash("defg".as_bytes()),
+            hash("efgh".as_bytes()),
         ];
         manual_hashes.sort();
         assert_eq!(hashes, manual_hashes[..4]);
@@ -257,9 +270,17 @@ mod tests {
             .map(|kmers| kmers.min_hash(2).unwrap())
             .collect::<Vec<_>>();
 
-        let mut manual_hashes_1 = vec![hash("ab"), hash("bc"), hash("cd")];
+        let mut manual_hashes_1 = vec![
+            hash("ab".as_bytes()),
+            hash("bc".as_bytes()),
+            hash("cd".as_bytes()),
+        ];
         manual_hashes_1.sort();
-        let mut manual_hashes_2 = vec![hash("bc"), hash("cd"), hash("de")];
+        let mut manual_hashes_2 = vec![
+            hash("bc".as_bytes()),
+            hash("cd".as_bytes()),
+            hash("de".as_bytes()),
+        ];
         manual_hashes_2.sort();
         let manual_hashes = vec![manual_hashes_1[..2].to_vec(), manual_hashes_2[..2].to_vec()];
 
@@ -285,9 +306,17 @@ mod tests {
             all_hashes.push(hashes);
         }
 
-        let mut manual_hashes_1 = vec![hash("ab"), hash("bc"), hash("cd")];
+        let mut manual_hashes_1 = vec![
+            hash("ab".as_bytes()),
+            hash("bc".as_bytes()),
+            hash("cd".as_bytes()),
+        ];
         manual_hashes_1.sort();
-        let mut manual_hashes_2 = vec![hash("bc"), hash("cd"), hash("de")];
+        let mut manual_hashes_2 = vec![
+            hash("bc".as_bytes()),
+            hash("cd".as_bytes()),
+            hash("de".as_bytes()),
+        ];
         manual_hashes_2.sort();
         let mut manual_hashes = vec![manual_hashes_1[..2].to_vec(), manual_hashes_2[..2].to_vec()];
 
@@ -332,12 +361,5 @@ mnop
         all_hashes.sort();
         manual_hashes.sort();
         assert_eq!(all_hashes, manual_hashes);
-    }
-
-    fn hash(s: &str) -> u64 {
-        let b = s.as_bytes();
-        let mut h = DefaultHasher::new();
-        b.hash(&mut h);
-        h.finish()
     }
 }
